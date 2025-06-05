@@ -1,0 +1,66 @@
+# Node & Electron
+node_modules/
+dist/
+build/
+out/
+release/
+*.log
+*.tsbuildinfo
+
+# Python
+venv/
+.env/
+.env.*
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.spec
+*.sqlite3
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.bak
+*.tmp
+
+# Electron packaging
+*.asar
+
+# Logs & Coverage
+coverage/
+.coverage
+*.log
+
+# Test & Temp
+.pytest_cache/
+.mypy_cache/
+
+# Sensitive config (edit as needed)
+config/settings.json
+
+# Misc
+*.orig
+
+# Ignore build artifacts and generated files in backend and renderer
+backend/__pycache__/
+backend/venv/
+backend/dist/
+backend/build/
+renderer/dist/
+renderer/build/
+
+# Ignore Playwright output
+playwright-report/
+
+# Ignore Electron builder extra resources
+build_scripts/*.exe
+build_scripts/*.bin
+
+# Ignore local onboarding or documentation drafts
+ONBOARDING-local.md
+
+# End of .gitignore
