@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SERINA User Settings",
+  "description": "Schema for SERINA application user settings (config.json)",
+  "type": "object",
+  "properties": {
+    "llmProvider": {
+      "description": "The primary Large Language Model provider to use.",
+      "type": "string",
+      "enum": [
+        "OpenAI",
+        "Anthropic",
+        "Mistral",
+        "TogetherAI",
+        "OpenRouter",
+        "LMStudio",
+        "Ollama"
+      ],
+      "default": "OpenAI"
+    },
+    "selectedModel": {
+      "description": "The specific model selected for the chosen provider (e.g., 'gpt-4-turbo', 'claude-3-opus-20240229').",
+      "type": "string",
+      "default": "gpt-4-turbo-preview" 
+    },
+    "apiKey": {
+      "description": "API key for the selected LLM provider. This will be encrypted at rest.",
+      "type": "string",
+      "default": ""
+    },
+    "apiBaseUrl": {
+      "description": "Optional custom base URL for API calls (e.g., for self-hosted models like LMStudio, Ollama, or proxies).",
+      "type": "string",
+      "format": "uri",
+      "default": ""
+    },
+    "reminderInterval": {
+      "description": "How often to check for and show email reminders, in minutes.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1440, "comment": "Max 24 hours",
+      "default": 30
+    },
+    "autoSummarize": {
+      "description": "Automatically summarize new emails upon fetching.",
+      "type": "boolean",
+      "default": true
+    },
+    "autoCategorize": {
+      "description": "Automatically categorize new emails using LLM (e.g., Urgent, Info, Spam).",
+      "type": "boolean",
+      "default": false
+    },
+    "showNotifications": {
+      "description": "Enable desktop notifications for new emails or reminders.",
+      "type": "boolean",
+      "default": true
+    },
+    "notificationSound": {
+      "description": "Play a sound with notifications.",
+      "type": "boolean",
+      "default": true
+    },
+    "theme": {
+      "description": "Application theme.",
+      "type": "string",
+      "enum": ["system", "light", "dark"],
+      "default": "system"
+    },
+    "developerMode": {
+      "description": "Enable developer-specific features and logging.",
+      "type": "boolean",
+      "default": false
+    },
+    "logLevel": {
+        "description": "Logging level for the application.",
+        "type": "string",
+        "enum": ["debug", "info", "warn", "error"],
+        "default": "info"
+    },
+    "emailAccount": {
+      "description": "Configuration for the primary email account.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "description": "Type of email account.",
+          "type": "string",
+          "enum": ["microsoft_graph", "imap_smtp", "google_oauth"],
+          "default": "microsoft_graph"
+        },
+        "emailAddress": {
+          "description": "User's email address.",
+          "type": "string",
+          "format": "email",
+          "default": ""
+        }
+        // Specific fields for MS Graph, IMAP/SMTP will be added as needed
+        // e.g., tenantId for MS Graph, server/port details for IMAP/SMTP
+      },
+      "required": ["type", "emailAddress"]
+    }
+  },
+  "required": [
+    "llmProvider",
+    "selectedModel",
+    "apiKey",
+    "reminderInterval",
+    "autoSummarize"
+  ],
+  "additionalProperties": false
+}

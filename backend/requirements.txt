@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+msal
+requests
+websockets
+apscheduler
+cryptography
+# sqlite3 is built-in; no need to pip-install
+openai
+anthropic
+pydantic
+# plus any HTTP-client libs for Mistral, TogetherAI, OpenRouter
