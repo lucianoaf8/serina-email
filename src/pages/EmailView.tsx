@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Rnd } from 'react-rnd';
 import type { DraggableEvent, DraggableData } from 'react-draggable';
 import { invoke } from "@tauri-apps/api/tauri";
@@ -21,6 +22,7 @@ interface EmailViewProps {
 }
 
 const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkMode }) => {
+  const navigate = useNavigate();
   const [emails, setEmails] = useState<Email[]>([]);
   const [selectedEmailIndex, setSelectedEmailIndex] = useState(0);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
@@ -705,8 +707,9 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
               </div>
             )}
             <button
-              onClick={() => invoke('show_settings_window')}
+              onClick={() => navigate('/settings')}
               className="p-2 text-gray-400 hover:text-gray-200 transition-colors duration-200 hover:scale-110"
+              title="Settings"
             >
               <Settings className="w-5 h-5" />
             </button>
