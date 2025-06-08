@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/tauri";
 import { Save, TestTube, Moon, Sun, X, Mail, Bot, Clock, Shield, Bell, Key, Zap, AlertCircle, CheckCircle, Settings as SettingsIcon, Eye, EyeOff, Play } from "lucide-react";
+import { sanitizeApiKey, sanitizeTextInput, safeJsonParse } from "../utils/sanitization";
 
 interface SettingsProps {
   darkMode: boolean;
@@ -59,7 +60,7 @@ const SerinaSettings: React.FC<SettingsProps> = ({ darkMode, onToggleDarkMode })
   const loadConfig = async () => {
     try {
       const response = await invoke('get_config');
-      const configData = JSON.parse(response as string);
+      const configData = safeJsonParse(response as string, null);
       setConfig(configData);
     } catch (error) {
       console.error('Failed to load config:', error);
@@ -337,7 +338,7 @@ const SerinaSettings: React.FC<SettingsProps> = ({ darkMode, onToggleDarkMode })
                     <input
                       type={showApiKey ? "text" : "password"}
                       value={config.llm.api_key}
-                      onChange={(e) => updateConfig('llm', 'api_key', e.target.value)}
+                      onChange={(e) => updateConfig('llm', 'api_key', sanitizeApiKey(e.target.value))}
                       placeholder="Enter your API key"
                       className="w-full p-3 border border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent bg-gray-800 text-gray-300 pr-10"
                     />
@@ -633,7 +634,7 @@ const SerinaSettings: React.FC<SettingsProps> = ({ darkMode, onToggleDarkMode })
                   <input
                     type="text"
                     value={config.todo.default_list_name}
-                    onChange={(e) => updateConfig('todo', 'default_list_name', e.target.value)}
+                    onChange={(e) => updateConfig('todo', 'default_list_name', sanitizeTextInput(e.target.value, 100))}
                     placeholder="Tasks"
                     className="w-full p-3 border border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent bg-gray-800 text-gray-300"
                   />

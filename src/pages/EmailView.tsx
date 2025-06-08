@@ -4,6 +4,8 @@ import { Rnd } from 'react-rnd';
 import type { DraggableEvent, DraggableData } from 'react-draggable';
 import { invoke } from "@tauri-apps/api/tauri";
 import { Settings, Moon, Sun, Minimize2, Maximize2, X, Mail, Bot, CheckSquare, Send, Archive, Flag, Clock, MoreHorizontal, Layout, Check, Maximize, Minimize, Minus } from "lucide-react";
+import { useNotifications } from '../components/NotificationSystem';
+import { sanitizeEmailContent, sanitizeSearchQuery, sanitizeTextInput, safeJsonParse } from '../utils/sanitization';
 
 interface Email {
   id: string;
@@ -23,6 +25,7 @@ interface EmailViewProps {
 
 const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkMode }) => {
   const navigate = useNavigate();
+  const { showSuccess, showError } = useNotifications();
   const [emails, setEmails] = useState<Email[]>([]);
   const [selectedEmailIndex, setSelectedEmailIndex] = useState(0);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
@@ -281,13 +284,24 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
     try {
       setLoading(true);
       const response = await invoke('get_emails', { limit: 20 });
-      const emailData = JSON.parse(response as string);
-      setEmails(emailData);
-      if (emailData.length > 0) {
-        setSelectedEmail(emailData[0]);
+      const emailData = safeJsonParse(response as string, []);
+      
+      // Sanitize email content before setting state
+      const sanitizedEmails = emailData.map((email: Email) => ({
+        ...email,
+        subject: sanitizeTextInput(email.subject, 200),
+        sender: sanitizeTextInput(email.sender, 100),
+        sender_email: sanitizeTextInput(email.sender_email, 254),
+        body: sanitizeEmailContent(email.body)
+      }));
+      
+      setEmails(sanitizedEmails);
+      if (sanitizedEmails.length > 0) {
+        setSelectedEmail(sanitizedEmails[0]);
       }
     } catch (error) {
       console.error('Failed to load emails:', error);
+      showError('Failed to load emails', 'There was an error loading your emails. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -299,8 +313,8 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
       const response = await invoke('summarize_email', { 
         emailContent: email.body 
       });
-      const summaryData = JSON.parse(response as string);
-      setSummary(summaryData.summary);
+      const summaryData = safeJsonParse(response as string, { summary: "Unable to generate summary" });
+      setSummary(sanitizeTextInput(summaryData.summary, 2000));
     } catch (error) {
       console.error('Failed to generate summary:', error);
       setSummary("Unable to generate summary");
@@ -318,10 +332,11 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
         emailContent: selectedEmail.body,
         instruction: "Write a professional, helpful reply"
       });
-      const replyData = JSON.parse(response as string);
-      setReplyText(replyData.reply);
+      const replyData = safeJsonParse(response as string, { reply: "" });
+      setReplyText(sanitizeTextInput(replyData.reply, 10000));
     } catch (error) {
       console.error('Failed to generate reply:', error);
+      showError('Failed to generate reply', 'There was an error generating the AI reply. Please try again.');
     } finally {
       setReplyLoading(false);
     }
@@ -330,16 +345,22 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
   const handleSendReply = async () => {
     if (!selectedEmail || !replyText.trim()) return;
 
+    const sanitizedReplyText = sanitizeTextInput(replyText, 10000);
+    if (!sanitizedReplyText.trim()) {
+      showError('Invalid reply content', 'Please enter a valid reply message.');
+      return;
+    }
+
     try {
       await invoke('send_reply', {
         emailId: selectedEmail.id,
-        replyText
+        replyText: sanitizedReplyText
       });
       setReplyText("");
-      alert('Reply sent successfully!');
+      showSuccess('Reply sent successfully!', 'Your email reply has been delivered.');
     } catch (error) {
       console.error('Failed to send reply:', error);
-      alert('Failed to send reply');
+      showError('Failed to send reply', 'There was an error sending your email. Please try again.');
     }
   };
 
@@ -361,18 +382,21 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
       const taskResponse = await invoke('generate_task_from_email', {
         emailContent: selectedEmail.body
       });
-      const taskData = JSON.parse(taskResponse as string);
+      const taskData = safeJsonParse(taskResponse as string, { title: "New Task", description: "Generated from email" });
+      
+      const sanitizedTitle = sanitizeTextInput(taskData.title, 200);
+      const sanitizedDescription = sanitizeTextInput(taskData.description, 2000);
       
       await invoke('create_task_from_email', {
         emailId: selectedEmail.id,
-        title: taskData.title,
-        description: taskData.description
+        title: sanitizedTitle,
+        description: sanitizedDescription
       });
 
-      alert('Task created successfully!');
+      showSuccess('Task created successfully!', `Created task: "${sanitizedTitle}"`);
     } catch (error) {
       console.error('Failed to create task:', error);
-      alert('Failed to create task');
+      showError('Failed to create task', 'There was an error creating the task. Please try again.');
     }
   };
 
@@ -518,11 +542,9 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
           <div className="flex-1 p-4 overflow-y-auto" style={{ backgroundColor: '#1f2937' }}>
             <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 shadow-lg">
               <div className="prose max-w-none text-sm text-gray-300">
-                <div 
-                  dangerouslySetInnerHTML={{ 
-                    __html: selectedEmail.body.replace(/\n/g, '<br>') 
-                  }}
-                />
+                <div className="whitespace-pre-wrap break-words">
+                  {selectedEmail.body}
+                </div>
               </div>
             </div>
           </div>
@@ -631,7 +653,7 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
       <div className="flex-1 p-3">
         <textarea 
           value={replyText}
-          onChange={(e) => setReplyText(e.target.value)}
+          onChange={(e) => setReplyText(sanitizeTextInput(e.target.value, 10000))}
           placeholder="Type your reply here or use AI to generate one..."
           className="w-full h-full border border-gray-600 rounded p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-gray-800 text-gray-300 placeholder-gray-500"
         />
@@ -674,7 +696,7 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
               type="text"
               placeholder="Search emails..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => setSearchQuery(sanitizeSearchQuery(e.target.value))}
               className="px-4 py-2 border border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64 bg-gray-800 text-gray-300 placeholder-gray-500 transition-all duration-200"
             />
           </div>

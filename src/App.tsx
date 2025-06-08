@@ -4,6 +4,8 @@ import { invoke } from "@tauri-apps/api/tauri";
 import EmailView from "./pages/EmailView";
 import Settings from "./pages/Settings";
 import ReminderPopup from "./pages/ReminderPopup";
+import ErrorBoundary from "./components/ErrorBoundary";
+import { NotificationProvider } from "./components/NotificationSystem";
 
 function App() {
   const location = useLocation();
@@ -52,34 +54,48 @@ function App() {
   }
 
   return (
-    <div className={darkMode ? 'dark' : ''}>
-      <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
-        <Routes>
-          <Route 
-            path="/" 
-            element={
-              <EmailView 
-                darkMode={darkMode} 
-                onToggleDarkMode={toggleDarkMode} 
-              />
-            } 
-          />
-          <Route 
-            path="/settings" 
-            element={
-              <Settings 
-                darkMode={darkMode} 
-                onToggleDarkMode={toggleDarkMode} 
-              />
-            } 
-          />
-          <Route 
-            path="/reminder" 
-            element={<ReminderPopup />} 
-          />
-        </Routes>
-      </div>
-    </div>
+    <ErrorBoundary>
+      <NotificationProvider>
+        <div className={darkMode ? 'dark' : ''}>
+          <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+            <ErrorBoundary>
+              <Routes>
+                <Route 
+                  path="/" 
+                  element={
+                    <ErrorBoundary>
+                      <EmailView 
+                        darkMode={darkMode} 
+                        onToggleDarkMode={toggleDarkMode} 
+                      />
+                    </ErrorBoundary>
+                  } 
+                />
+                <Route 
+                  path="/settings" 
+                  element={
+                    <ErrorBoundary>
+                      <Settings 
+                        darkMode={darkMode} 
+                        onToggleDarkMode={toggleDarkMode} 
+                      />
+                    </ErrorBoundary>
+                  } 
+                />
+                <Route 
+                  path="/reminder" 
+                  element={
+                    <ErrorBoundary>
+                      <ReminderPopup />
+                    </ErrorBoundary>
+                  } 
+                />
+              </Routes>
+            </ErrorBoundary>
+          </div>
+        </div>
+      </NotificationProvider>
+    </ErrorBoundary>
   );
 }
 
