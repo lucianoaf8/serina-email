@@ -1,107 +1,229 @@
 # SERINA Email Assistant
 
-## High-Level Overview
+**Smart Email Reminders & AI-Powered Task Creation**
 
-SERINA (Smart Email & Reminder Integrated Notification Assistant) is an intelligent desktop application designed to streamline email management and enhance productivity. It leverages Large Language Models (LLMs) to summarize emails, draft replies, manage reminders, and integrate with calendar events, all within a secure, local-first Electron application.
-
-Key features include:
-- Secure authentication with Microsoft Graph API (and potentially IMAP/SMTP).
-- Local caching of email data in an encrypted SQLite database.
-- AI-powered email summarization and reply generation.
-- Intelligent reminder system based on email content and user settings.
-- Meeting-aware scheduling capabilities.
-- Configurable settings for LLM providers, reminder preferences, and more.
-
-## How to Run in Dev Mode
-
-1.  **Prerequisites:**
-    *   Node.js (LTS version recommended)
-    *   npm (comes with Node.js)
-    *   Python (version 3.12 specified in tasks)
-
-2.  **Clone the repository (if applicable):**
-    ```bash
-    git clone <repository-url>
-    cd serina-email
-    ```
-
-3.  **Install Node.js dependencies:**
-    ```bash
-    npm install
-    ```
-
-4.  **Set up Python backend (Navigate to `backend/` directory first):**
-    ```bash
-    cd backend
-    python3.12 -m venv venv
-    # Activate virtual environment
-    # On Windows (Git Bash or similar):
-    source venv/Scripts/activate
-    # On macOS/Linux:
-    # source venv/bin/activate
-    pip install --upgrade pip
-    pip install -r requirements.txt # (requirements.txt will be created in a later step)
-    cd ..
-    ```
-
-5.  **Run the application:**
-    ```bash
-    npm run dev
-    ```
-    This command will start the Electron application.
-
-6.  **Backend Server:**
-    The Python backend (FastAPI) will need to be started separately. Instructions for this will be added as the backend is developed. Typically, it would be something like:
-    ```bash
-    cd backend
-    uvicorn main:app --reload # (Assuming main.py and app instance)
-    ```
+SERINA is a Windows desktop app that monitors your Outlook inbox, provides AI-powered email summaries, and creates Microsoft TODO tasks from emails - all running seamlessly in the background.
 
 ---
 
-## How to Contribute
+## ✨ Features
 
-We welcome contributions! To get started:
-1. Fork the repository and clone it locally.
-2. Create a new branch for your feature or bugfix: `git checkout -b feature/your-feature-name`.
-3. Make your changes and commit with clear messages.
-4. Push your branch and open a Pull Request (PR) against the `main` branch.
+- **📧 Smart Email Monitoring** - Automatically checks Outlook for new emails
+- **🤖 AI Summaries** - Get instant email summaries using OpenAI or OpenRouter
+- **✅ Task Creation** - Create Microsoft TODO tasks from emails with AI-generated descriptions
+- **⏰ Smart Reminders** - Desktop notifications with snooze options (15m, 1h, dismiss)
+- **🌙 Dark Mode** - Beautiful dark theme for night work
+- **⚡ Background Operation** - No Outlook windows, everything happens silently
 
-Please ensure your code follows the coding standards below and includes tests where applicable.
+---
 
-## Folder Structure
+## 🖥️ Screenshots
+
+**Main Email Review Interface**
+- Email list with AI summaries
+- Quick actions: Reply, Create Task, Mark Read, Snooze
+
+**Reminder Popup**
+- Small, non-intrusive notification
+- Quick snooze options
+
+**Settings Page**
+- LLM provider configuration (OpenAI/OpenRouter)
+- Notification preferences
+- Dark mode toggle
+
+---
+
+## 🔧 Requirements
+
+### System Requirements
+- **Windows 10/11** (required for Outlook COM automation)
+- **Microsoft Outlook** desktop app installed and configured
+- **Work/Personal email** logged into Outlook
+- **Node.js 18+** and **Python 3.9+**
+
+### API Keys Needed
+- **OpenAI API Key** (recommended) - [Get one here](https://platform.openai.com/api-keys)
+- **OpenRouter API Key** (alternative) - [Get one here](https://openrouter.ai/)
+
+---
+
+## 🚀 Quick Setup
+
+### 1. Install Dependencies
+
+```bash
+# Install Node.js dependencies
+npm install
+
+# Setup Python backend
+cd backend
+python -m venv venv
+venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+cd ..
+```
+
+### 2. Install Frontend Dependencies
+
+```bash
+cd renderer
+npm install
+cd ..
+```
+
+### 3. Configure API Keys
+
+1. Start SERINA: `npm run dev`
+2. Open Settings (gear icon)
+3. Enter your OpenAI or OpenRouter API key
+4. Set check interval (default: 15 minutes)
+5. Configure quiet hours if desired
+
+### 4. First Run
+
+- SERINA will connect to your logged-in Outlook
+- Check for new emails automatically
+- Show reminder popup when new emails arrive
+- Click "View" to see email summaries and take actions
+
+---
+
+## 🎯 How It Works
+
+### Email Monitoring
+1. SERINA checks Outlook every 15-30 minutes (configurable)
+2. Finds new/unread emails via COM automation
+3. Generates AI summaries for each email
+4. Shows desktop reminder if new emails found
+
+### Taking Actions
+- **View Email** - See AI summary and original content
+- **Reply** - Compose and send replies directly from SERINA
+- **Create Task** - Generate TODO task with AI-powered description
+- **Mark Read** - Mark email as read in Outlook
+- **Snooze** - Remind again in 15m, 1h, or custom time
+
+### Background Operation
+- No Outlook windows appear during operation
+- All COM automation happens silently
+- SERINA runs in system tray when minimized
+
+---
+
+## 📁 Project Structure
 
 ```
-SERINA/
-├── backend/         # Python FastAPI backend
-│   ├── services/    # Core backend services (email, llm, scheduler, etc.)
-│   ├── main.py      # FastAPI entry point
-│   └── ...
-├── renderer/        # Electron + React frontend
+serina/
+├── main.js              # Electron main process
+├── preload.js           # Secure IPC bridge
+├── package.json         # Electron app configuration
+├── renderer/            # React frontend
 │   ├── src/
-│   │   ├── components/  # React components (Settings, EmailList, etc.)
-│   │   └── pages/       # Page-level components
-│   └── ...
-├── assets/          # Images, icons, static files
-├── config/          # Configuration files
-├── build_scripts/   # Scripts for building/packaging
-├── package.json     # Node/Electron project config
-├── main.js          # Electron main process
-├── preload.js       # Electron preload script
-├── README.md        # Project documentation
-└── ...
+│   └── package.json
+└── backend/             # Python FastAPI server
+    ├── main.py          # API server
+    ├── email_service.py # Outlook COM integration
+    ├── llm_service.py   # OpenAI/OpenRouter
+    ├── config_service.py# Settings management
+    └── requirements.txt
 ```
-
-## Coding Standards
-
-- Use clear, descriptive variable and function names.
-- Write modular, testable code. Prefer pure functions and stateless components when possible.
-- Use [Prettier](https://prettier.io/) and [ESLint](https://eslint.org/) for JS/React code formatting and linting.
-- For Python, follow [PEP8](https://www.python.org/dev/peps/pep-0008/) style guidelines and use type hints.
-- Write docstrings/comments for all public functions and modules.
-- Add/maintain tests for new features and bugfixes.
-- All code should be reviewed via Pull Request before merging to `main`.
 
 ---
 
-Further details on configuration (API keys, etc.) will be added as the project progresses.
+## 🔑 Configuration
+
+### LLM Providers
+
+**OpenAI (Recommended)**
+- Model: `gpt-3.5-turbo`
+- Fast, reliable summaries
+- Cost: ~$0.001 per email summary
+
+**OpenRouter (Alternative)**
+- Access to multiple models
+- Backup when OpenAI is down
+- Model: `anthropic/claude-3-haiku`
+
+### Email Settings
+- **Check Interval**: 15, 30, or 60 minutes
+- **Max Emails**: Limit emails per check (default: 20)
+- **Quiet Hours**: No notifications during sleep/focus time
+
+### Notifications
+- **Desktop Notifications**: Enable/disable system notifications
+- **Popup Position**: Corner placement preference
+- **Auto-dismiss**: Popup disappears after 10 seconds
+
+---
+
+## 🛠️ Development
+
+### Start Development Environment
+
+```bash
+# Terminal 1: Start Python backend
+cd backend
+venv\Scripts\activate
+python main.py
+
+# Terminal 2: Start Electron app
+npm run dev
+```
+
+### Build for Production
+
+```bash
+# Build everything
+npm run build
+
+# Output: dist/SERINA Setup.exe
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**"Could not connect to Outlook"**
+- Ensure Outlook desktop app is installed
+- Make sure you're logged into your email account
+- Try restarting Outlook and SERINA
+
+**"LLM service not configured"**
+- Add API key in Settings
+- Check internet connection
+- Verify API key is valid
+
+**"No new emails found"**
+- Check Outlook is receiving emails normally
+- Verify email account is active in Outlook
+- Increase check interval if needed
+
+### Debug Mode
+
+```bash
+# Run with debug logging
+NODE_ENV=development npm run dev
+```
+
+---
+
+## 📄 License
+
+MIT License - See LICENSE file for details
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push branch: `git push origin feature/amazing-feature`
+5. Open Pull Request
+
+---
+
+**SERINA** - *Be notified only when it matters. Reply only when you're ready.*
