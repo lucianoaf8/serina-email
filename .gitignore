@@ -18,6 +18,11 @@ __pycache__/
 *.spec
 *.sqlite3
 
+# Rust/Tauri (ADD THESE)
+src-tauri/target/
+src-tauri/Cargo.lock
+*.rs.bk
+
 # OS & Editor
 .DS_Store
 Thumbs.db
@@ -62,5 +67,10 @@ build_scripts/*.bin
 
 # Ignore local onboarding or documentation drafts
 ONBOARDING-local.md
+
+# SERINA specific
+serina.db
+serina.db-journal
+.serina/
 
 # End of .gitignore
