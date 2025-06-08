@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from
 import { Rnd } from 'react-rnd';
 import type { DraggableEvent, DraggableData } from 'react-draggable';
 import { invoke } from "@tauri-apps/api/tauri";
-import { Settings, Moon, Sun, Minimize2, Maximize2, X, Mail, Bot, CheckSquare, Send, Archive, Flag, Clock, MoreHorizontal, Layout, Check, Maximize, Minimize, Minus } from "lucide-react";
+import { Settings, Moon, Sun, Minimize2, Maximize2, X, Mail, Bot, CheckSquare, Send, Archive, Flag, Clock, MoreHorizontal } from "lucide-react";
 
 interface Email {
   id: string;
@@ -26,202 +26,63 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [replyText, setReplyText] = useState('');
   const [selectedLLM, setSelectedLLM] = useState('openai');
-  const [selectedModel, setSelectedModel] = useState('gpt-4');
-
-  const getAvailableModels = (provider: string) => {
-    switch (provider) {
-      case 'openai':
-        return [
-          { value: 'gpt-4', label: 'GPT-4' },
-          { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-          { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' }
-        ];
-      case 'openrouter':
-        return [
-          { value: 'anthropic/claude-3-opus', label: 'Claude 3 Opus' },
-          { value: 'anthropic/claude-3-sonnet', label: 'Claude 3 Sonnet' },
-          { value: 'anthropic/claude-3-haiku', label: 'Claude 3 Haiku' },
-          { value: 'openai/gpt-4', label: 'GPT-4' }
-        ];
-      default:
-        return [];
-    }
-  };
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<string>("");
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [replyLoading, setReplyLoading] = useState(false);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [resizing, setResizing] = useState<any>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   
-  const getInitialLayout = () => {
-    const saved = localStorage.getItem('email-panel-layout');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.warn('Failed to parse saved layout:', e);
-      }
-    }
-    return [
-      { id: 'email-list',    component: 'EmailList',   position: { x: 0, y: 0, w: 1, h: 1 } },
-      { id: 'email-content', component: 'EmailContent',position: { x: 1, y: 0, w: 2, h: 1 } },
-      { id: 'ai-summary',    component: 'AISummary',   position: { x: 3, y: 0, w: 1, h: 1 } },
-      { id: 'reply-area',    component: 'ReplyArea',   position: { x: 0, y: 1, w: 4, h: 1 } }
-    ];
-  };
-  
-  const [boxLayout, setBoxLayout] = useState(getInitialLayout());
+  // Box layout state with flexible sizing
+  // (1) Your existing boxLayout state:
+  const [boxLayout, setBoxLayout] = useState([
+    { id: 'email-list',    component: 'EmailList',   position: { x: 0, y: 0, w: 1, h: 2 } },
+    { id: 'email-content', component: 'EmailContent',position: { x: 1, y: 0, w: 2, h: 1 } },
+    { id: 'ai-summary',    component: 'AISummary',   position: { x: 3, y: 0, w: 1, h: 1 } },
+    { id: 'reply-area',    component: 'ReplyArea',   position: { x: 1, y: 1, w: 2, h: 1 } }
+  ]);
 
-  const getInitialStyles = () => {
-    const saved = localStorage.getItem('email-panel-styles');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.warn('Failed to parse saved styles:', e);
-      }
-    }
-    return {};
-  };
-  
+  // (2) NEW: pixel-based styles for each box (x,y,width,height in px)
   const [boxStyles, setBoxStyles] = useState<
     Record<string, { x:number; y:number; width:number; height:number }>
-  >(getInitialStyles());
-  
-  const [containerBounds, setContainerBounds] = useState({ width: 0, height: 0 });
-  const [isEditingLayout, setIsEditingLayout] = useState(false);
-  const [backupStyles, setBackupStyles] = useState<Record<string, { x:number; y:number; width:number; height:number }>>({});
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  >({});
 
-  const startEditingLayout = () => {
-    setBackupStyles({ ...boxStyles });
-    setIsEditingLayout(true);
-  };
-
-  const saveLayoutChanges = () => {
-    localStorage.setItem('email-panel-styles', JSON.stringify(boxStyles));
-    setIsEditingLayout(false);
-    setBackupStyles({});
-  };
-
-  const cancelLayoutChanges = () => {
-    setBoxStyles(backupStyles);
-    setIsEditingLayout(false);
-    setBackupStyles({});
-  };
-
-  const toggleFullscreen = async () => {
-    try {
-      if (isFullscreen) {
-        await invoke('restore_window');
-      } else {
-        await invoke('maximize_window');
-      }
-      setIsFullscreen(!isFullscreen);
-    } catch (error) {
-      console.error('Failed to toggle fullscreen:', error);
-    }
-  };
-
+  // (3) NEW: handleDragStop — update x,y on drag end
   const handleDragStop = (
     _e: DraggableEvent,
     d: DraggableData,
     id: string
   ) => {
-    const grid = gridRef.current;
-    if (!grid) return;
-    
-    const gridRect = grid.getBoundingClientRect();
-    const maxX = gridRect.width - boxStyles[id].width;
-    const maxY = gridRect.height - boxStyles[id].height;
-    
-    let boundedX = Math.max(0, Math.min(maxX, d.x));
-    let boundedY = Math.max(0, Math.min(maxY, d.y));
-    
-    // Check for collisions and adjust position
-    while (checkCollision(boundedX, boundedY, boxStyles[id].width, boxStyles[id].height, id)) {
-      if (boundedX > 0) boundedX -= 10;
-      else if (boundedY > 0) boundedY -= 10;
-      else break;
-    }
-    
-    const newStyles = {
-      ...boxStyles,
-      [id]: { ...boxStyles[id], x: boundedX, y: boundedY }
-    };
-    
-    setBoxStyles(newStyles);
-    if (!isEditingLayout) {
-      localStorage.setItem('email-panel-styles', JSON.stringify(newStyles));
-    }
+  
+    setBoxStyles(styles => ({
+      ...styles,
+      [id]: { ...styles[id], x: d.x, y: d.y }
+    }));
   };
 
-  const checkCollision = (
-    x: number, 
-    y: number, 
-    width: number, 
-    height: number, 
-    excludeId: string
-  ) => {
-    for (const otherId of Object.keys(boxStyles)) {
-      if (otherId === excludeId) continue;
-      
-      const other = boxStyles[otherId];
-      if (
-        x < other.x + other.width &&
-        x + width > other.x &&
-        y < other.y + other.height &&
-        y + height > other.y
-      ) {
-        return true;
-      }
-    }
-    return false;
-  };
-
+  // (4) NEW: handleResizeStop — update width,height,x,y on resize end
   const handleResizeStop = (
-    _e: any,
+    _e: DraggableEvent,
     _dir: any,
     ref: HTMLElement,
-    _delta: { width: number; height: number },
+    delta: { width: number; height: number },
     pos: { x: number; y: number },
     id: string
   ) => {
-    const grid = gridRef.current;
-    if (!grid) return;
-    
-    const gridRect = grid.getBoundingClientRect();
-    const minSize = 200;
-    
-    // Calculate bounds considering grid edges
-    const maxWidth = gridRect.width - pos.x;
-    const maxHeight = gridRect.height - pos.y;
-    
-    let boundedWidth = Math.max(minSize, Math.min(maxWidth, ref.offsetWidth));
-    let boundedHeight = Math.max(minSize, Math.min(maxHeight, ref.offsetHeight));
-    
-    // Check for collisions and adjust size if needed
-    while (checkCollision(pos.x, pos.y, boundedWidth, boundedHeight, id) && 
-           (boundedWidth > minSize || boundedHeight > minSize)) {
-      if (boundedWidth > minSize) boundedWidth -= 10;
-      if (boundedHeight > minSize) boundedHeight -= 10;
-    }
-    
-    const newStyles = {
-      ...boxStyles,
-      [id]: {
+    setBoxStyles(styles => {
+      const updated = { ...styles };
+      updated[id] = {
         x: pos.x,
         y: pos.y,
-        width: boundedWidth,
-        height: boundedHeight
-      }
-    };
-    
-    setBoxStyles(newStyles);
-    if (!isEditingLayout) {
-      localStorage.setItem('email-panel-styles', JSON.stringify(newStyles));
-    }
+        width: ref.offsetWidth,
+        height: ref.offsetHeight
+      };
+      // TODO: find neighbor(s) adjacent in the resize direction
+      //       and subtract `delta.width` or `delta.height` from them.
+      return updated;
+    });
   };
 
   useEffect(() => {
@@ -241,39 +102,20 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
   useLayoutEffect(() => {
     const grid = gridRef.current;
     if (!grid) return;
-    
-    const updateLayout = () => {
-      const { width, height } = grid.getBoundingClientRect();
-      setContainerBounds({ width, height });
-      
-      // Only set initial layout if no saved styles exist
-      if (Object.keys(boxStyles).length === 0) {
-        const colW = width / 4;
-        const rowH = height / 2;
-        const initial: Record<string, { x:number; y:number; width:number; height:number }> = {};
-        
-        boxLayout.forEach(b => {
-          initial[b.id] = {
-            x: b.position.x * colW,
-            y: b.position.y * rowH,
-            width: b.position.w * colW,
-            height: b.position.h * rowH
-          };
-        });
-        setBoxStyles(initial);
-      }
-    };
-    
-    updateLayout();
-    
-    const resizeObserver = new ResizeObserver(() => {
-      const { width, height } = grid.getBoundingClientRect();
-      setContainerBounds({ width, height });
+    const { width, height } = grid.getBoundingClientRect();
+    const colW = width  / 4;
+    const rowH = height / 2;
+    const initial: Record<string, { x:number; y:number; width:number; height:number }> = {};
+    boxLayout.forEach(b => {
+      initial[b.id] = {
+        x: b.position.x * colW,
+        y: b.position.y * rowH,
+        width: b.position.w * colW,
+        height: b.position.h * rowH
+      };
     });
-    resizeObserver.observe(grid);
-    
-    return () => resizeObserver.disconnect();
-  }, [boxLayout, boxStyles]);
+    setBoxStyles(initial);
+  }, [boxLayout]);
 
   const loadEmails = async () => {
     try {
@@ -400,6 +242,90 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
     }
   };
 
+  // Drag and Drop functionality
+  const handleDragStart = (e: React.DragEvent, boxId: string) => {
+    setDragging(boxId);
+    e.dataTransfer.setData('text/plain', boxId);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, targetBoxId: string) => {
+    e.preventDefault();
+    const draggedBoxId = e.dataTransfer.getData('text/plain');
+    
+    if (draggedBoxId !== targetBoxId) {
+      setBoxLayout(prev => {
+        const newLayout = [...prev];
+        const draggedIndex = newLayout.findIndex(box => box.id === draggedBoxId);
+        const targetIndex = newLayout.findIndex(box => box.id === targetBoxId);
+        
+        const draggedBox = newLayout[draggedIndex];
+        const targetBox = newLayout[targetIndex];
+        
+        const tempPosition = draggedBox.position;
+        draggedBox.position = targetBox.position;
+        targetBox.position = tempPosition;
+        
+        return newLayout;
+      });
+    }
+    setDragging(null);
+  };
+
+  const handleResizeStart = (e: React.MouseEvent, boxId: string, direction: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizing({ boxId, direction, startX: e.clientX, startY: e.clientY });
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!resizing || !gridRef.current) return;
+
+    const gridRect = gridRef.current.getBoundingClientRect();
+    const cellWidth = gridRect.width / 4;
+    const cellHeight = gridRect.height / 2;
+    
+    const deltaX = Math.round((e.clientX - resizing.startX) / cellWidth);
+    const deltaY = Math.round((e.clientY - resizing.startY) / cellHeight);
+    
+    setBoxLayout(prev => {
+      const newLayout = [...prev];
+      const boxIndex = newLayout.findIndex(box => box.id === resizing.boxId);
+      const box = newLayout[boxIndex];
+      
+      if (resizing.direction === 'se') {
+        const newW = Math.max(1, Math.min(4 - box.position.x, box.position.w + deltaX));
+        const newH = Math.max(1, Math.min(2 - box.position.y, box.position.h + deltaY));
+        box.position = { ...box.position, w: newW, h: newH };
+      } else if (resizing.direction === 'e') {
+        const newW = Math.max(1, Math.min(4 - box.position.x, box.position.w + deltaX));
+        box.position = { ...box.position, w: newW };
+      } else if (resizing.direction === 's') {
+        const newH = Math.max(1, Math.min(2 - box.position.y, box.position.h + deltaY));
+        box.position = { ...box.position, h: newH };
+      }
+      
+      return newLayout;
+    });
+  }, [resizing]);
+
+  const handleMouseUp = useCallback(() => {
+    setResizing(null);
+  }, []);
+
+  useEffect(() => {
+    if (resizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [resizing, handleMouseMove, handleMouseUp]);
 
   // Component renderers for each box type
   const EmailListBox = () => (
@@ -467,12 +393,6 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
 
   const EmailContentBox = () => (
     <div className="h-full flex flex-col">
-      <div className="p-3 border-b" style={{ 
-        borderColor: '#374151',
-        background: 'linear-gradient(135deg, #1f2937 0%, #111827 100%)'
-      }}>
-        <h3 className="font-semibold text-gray-100 text-sm">Email Content</h3>
-      </div>
       {selectedEmail && (
         <>
           <div className="p-4 border-b" style={{ 
@@ -540,33 +460,14 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
             <div className="w-2 h-2 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full animate-pulse"></div>
             <h3 className="font-semibold text-gray-100 text-sm">AI Assistant</h3>
           </div>
-          <div className="flex items-center space-x-2">
-            <select 
-              value={selectedLLM} 
-              onChange={(e) => {
-                setSelectedLLM(e.target.value);
-                const models = getAvailableModels(e.target.value);
-                if (models.length > 0) {
-                  setSelectedModel(models[0].value);
-                }
-              }}
-              className="text-xs border border-gray-600 rounded px-2 py-1 bg-gray-800 text-gray-300 focus:border-blue-500 focus:outline-none"
-            >
-              <option value="openai">OpenAI</option>
-              <option value="openrouter">OpenRouter</option>
-            </select>
-            <select 
-              value={selectedModel} 
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="text-xs border border-gray-600 rounded px-2 py-1 bg-gray-800 text-gray-300 focus:border-blue-500 focus:outline-none"
-            >
-              {getAvailableModels(selectedLLM).map(model => (
-                <option key={model.value} value={model.value}>
-                  {model.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select 
+            value={selectedLLM} 
+            onChange={(e) => setSelectedLLM(e.target.value)}
+            className="text-xs border border-gray-600 rounded px-2 py-1 bg-gray-800 text-gray-300 focus:border-blue-500 focus:outline-none"
+          >
+            <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
         </div>
       </div>
       <div className="flex-1 p-3 overflow-y-auto">
@@ -668,6 +569,9 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
               <Mail className="text-white w-4 h-4" />
             </div>
             <h1 className="text-xl font-semibold text-gray-100">SERINA Email Review</h1>
+          </div>
+          
+          <div className="flex items-center space-x-4">
             <input
               type="text"
               placeholder="Search emails..."
@@ -675,35 +579,6 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
               onChange={(e) => setSearchQuery(e.target.value)}
               className="px-4 py-2 border border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64 bg-gray-800 text-gray-300 placeholder-gray-500 transition-all duration-200"
             />
-          </div>
-          
-          <div className="flex items-center space-x-4">
-            {!isEditingLayout ? (
-              <button
-                onClick={startEditingLayout}
-                className="p-2 text-gray-400 hover:text-blue-400 transition-colors duration-200 hover:scale-110"
-                title="Edit Screen Layout"
-              >
-                <Layout className="w-5 h-5" />
-              </button>
-            ) : (
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={saveLayoutChanges}
-                  className="p-2 text-green-400 hover:text-green-300 transition-colors duration-200 hover:scale-110"
-                  title="Save Layout"
-                >
-                  <Check className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={cancelLayoutChanges}
-                  className="p-2 text-red-400 hover:text-red-300 transition-colors duration-200 hover:scale-110"
-                  title="Cancel Changes"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            )}
             <button
               onClick={() => invoke('show_settings_window')}
               className="p-2 text-gray-400 hover:text-gray-200 transition-colors duration-200 hover:scale-110"
@@ -713,23 +588,20 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
             <button
               onClick={onToggleDarkMode}
               className="p-2 text-gray-400 hover:text-gray-200 transition-colors duration-200 hover:scale-110"   
-              title="Toggle Theme"
             >
               {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
             <button
-              onClick={toggleFullscreen}
-              className="p-2 text-gray-400 hover:text-gray-200 transition-colors duration-200 hover:scale-110"
-              title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-            >
-              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
-            </button>
-            <button
               onClick={() => handleWindowControl('minimize_window')}
               className="p-2 text-gray-400 hover:text-gray-200 transition-colors duration-200"
-              title="Minimize"
             >
-              <Minus className="w-5 h-5" />
+              <Minimize2 className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => handleWindowControl('maximize_window')}
+              className="p-2 text-gray-400 hover:text-gray-200 transition-colors duration-200"
+            >
+              <Maximize2 className="w-5 h-5" />
             </button>
             <button
               onClick={() => handleWindowControl('close_window')}
@@ -748,48 +620,52 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
           ? null
           : boxLayout.map(box => (
             <Rnd
-              key={box.id}
-              size={{ width: boxStyles[box.id].width, height: boxStyles[box.id].height }}
-              position={{ x: boxStyles[box.id].x, y: boxStyles[box.id].y }}
-              onDragStop={(e, d) => handleDragStop(e, d, box.id)}
-              onResize={(e, dir, ref, delta, pos) => {
-                // Real-time collision checking during resize
-                const newWidth = ref.offsetWidth;
-                const newHeight = ref.offsetHeight;
-                if (checkCollision(pos.x, pos.y, newWidth, newHeight, box.id)) {
-                  return false; // Prevent the resize
-                }
-              }}
-              onResizeStop={(e, dir, ref, delta, pos) => handleResizeStop(e, dir, ref, delta, pos, box.id)}
-              bounds="parent"
-              minWidth={200}
-              minHeight={200}
-              maxWidth={containerBounds.width}
-              maxHeight={containerBounds.height}
-              enableResizing={isEditingLayout ? {
-                top: true, right: true, bottom: true, left: true,
-                topRight: true, bottomRight: true, bottomLeft: true, topLeft: true
-              } : false}
-              dragHandleClassName={isEditingLayout ? "drag-handle" : ""}
-              disableDragging={!isEditingLayout}
-              className="rounded-lg border overflow-hidden group"
-              style={{
-                background: 'linear-gradient(135deg, #374151 0%, #374151 100%)',
-                borderColor: isEditingLayout ? '#3b82f6' : '#4b5563',
-                borderWidth: isEditingLayout ? '2px' : '1px',
-                boxShadow: isEditingLayout 
-                  ? '0 8px 25px rgba(59, 130, 246, 0.3), 0 0 0 1px rgba(59, 130, 246, 0.1)' 
-                  : '0 8px 25px rgba(0, 0, 0, 0.3)',
-                zIndex: 1
-              }}
+            key={box.id}
+            size={{ width: boxStyles[box.id].width, height: boxStyles[box.id].height }}
+            position={{ x: boxStyles[box.id].x,    y: boxStyles[box.id].y }}
+            onDragStop={(e, d) => handleDragStop(e, d, box.id)}
+            onResizeStop={(e, dir, ref, delta, pos) => handleResizeStop(e, dir, ref, delta, pos, box.id)}
+            bounds="parent"
+            enableResizing={{
+              top: true, right: true, bottom: true, left: true,
+              topRight: true, bottomRight: true, bottomLeft: true, topLeft: true
+            }}
+            className="rounded-lg border overflow-hidden transition-all duration-200 relative"
+            style={{
+              width:  boxStyles[box.id].width,
+              height: boxStyles[box.id].height,
+              top:    boxStyles[box.id].y,
+              left:   boxStyles[box.id].x,
+              position: 'absolute',
+              background: 'linear-gradient(135deg, #374151 0%, #374151 100%)',
+              borderColor: '#4b5563',
+              boxShadow: dragging === box.id 
+                ? '0 20px 40px rgba(0, 0, 0, 0.5)' 
+                : '0 8px 25px rgba(0, 0, 0, 0.3)'
+            }}            
             >
               <div className="h-full relative">
-                {/* Drag handle - only show when editing */}
-                {isEditingLayout && (
-                  <div className="drag-handle absolute top-1 left-1 right-1 h-6 z-10 opacity-60 group-hover:opacity-100 transition-opacity duration-200 cursor-move flex items-center justify-center bg-blue-600/70 hover:bg-blue-500/80 rounded-t">
-                    <MoreHorizontal className="w-4 h-4 text-white" />
-                  </div>
-                )}
+                {/* Drag handle */}
+                <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-60 transition-opacity duration-200">
+                  <MoreHorizontal className="w-4 h-4 text-gray-400" />
+                </div>
+                
+                {/* Resize handles */}
+                <div 
+                  className="absolute bottom-0 right-0 w-4 h-4 opacity-0 group-hover:opacity-60 transition-opacity duration-200 z-20"
+                  style={{
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                    clipPath: 'polygon(100% 0%, 0% 100%, 100% 100%)'
+                  }}
+                />
+                <div 
+                  className="absolute bottom-0 right-0 left-0 h-2 opacity-0 group-hover:opacity-30 transition-opacity duration-200 z-20"
+                  style={{ background: 'linear-gradient(90deg, transparent 0%, #3b82f6 50%, transparent 100%)' }}
+                />
+                <div 
+                  className="absolute top-0 bottom-0 right-0 w-2 opacity-0 group-hover:opacity-30 transition-opacity duration-200 z-20"
+                  style={{ background: 'linear-gradient(180deg, transparent 0%, #3b82f6 50%, transparent 100%)' }}
+                />
                 
                 {renderBox(box)}
               </div>
@@ -806,32 +682,6 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
       }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <button className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-700 transition-all duration-200 text-gray-300 hover:text-white">
-              Skip
-            </button>
-            <button className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-700 transition-all duration-200 text-gray-300 hover:text-white flex items-center space-x-2">
-              <Clock className="w-4 h-4" />
-              <span>Snooze</span>
-            </button>
-            <button className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-700 transition-all duration-200 text-gray-300 hover:text-white flex items-center space-x-2">
-              <Flag className="w-4 h-4" />
-              <span>Flag</span>
-            </button>
-          </div>
-          
-          <div className="flex items-center space-x-3">
-            <button 
-              onClick={handleCreateTask}
-              className="px-4 py-2 rounded-lg font-medium transition-all duration-200 hover:scale-105 shadow-lg flex items-center space-x-2" 
-              style={{
-                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                color: 'white',
-                boxShadow: '0 0 15px rgba(139, 92, 246, 0.4)'
-              }}
-            >
-              <CheckSquare className="w-4 h-4" />
-              <span>Create Task</span>
-            </button>
             <button 
               onClick={handleSendReply}
               className="px-6 py-2 rounded-lg font-medium transition-all duration-200 hover:scale-105 shadow-lg flex items-center space-x-2" 
@@ -844,6 +694,31 @@ const SerinaEmailReviewer: React.FC<EmailViewProps> = ({ darkMode, onToggleDarkM
               <Send className="w-4 h-4" />
               <span>Send Reply</span>
             </button>
+            <button className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-700 transition-all duration-200 text-gray-300 hover:text-white flex items-center space-x-2">
+              <Archive className="w-4 h-4" />
+              <span>Archive</span>
+            </button>
+            <button className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-700 transition-all duration-200 text-gray-300 hover:text-white flex items-center space-x-2">
+              <Flag className="w-4 h-4" />
+              <span>Flag</span>
+            </button>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4 text-sm text-gray-400">
+              <span>{emails.filter(e => e.is_unread).length} unread</span>
+              <span>{emails.length} total</span>
+            </div>
+            
+            <div className="flex items-center space-x-3">
+              <button className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-700 transition-all duration-200 text-gray-300 hover:text-white">
+                Skip
+              </button>
+              <button className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-700 transition-all duration-200 text-gray-300 hover:text-white flex items-center space-x-2">
+                <Clock className="w-4 h-4" />
+                <span>Snooze</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
